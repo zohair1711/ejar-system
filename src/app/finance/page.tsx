@@ -86,13 +86,13 @@ export default function FinancePage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <button className="flex items-center gap-2 rounded-2xl bg-white px-6 py-3 text-sm font-black text-emerald-700 shadow-lg transition hover:scale-105 active:scale-95">
-              <Download className="h-5 w-5" />
+          <div className="flex flex-row gap-2 sm:gap-3">
+            <button className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 sm:px-6 text-xs sm:text-sm font-black text-emerald-700 shadow-lg transition hover:scale-105 active:scale-95 whitespace-nowrap">
+              <Download className="h-4 w-4 sm:h-5 sm:w-5" />
               تصدير كشف حساب
             </button>
-            <button className="flex items-center gap-2 rounded-2xl bg-white/10 px-6 py-3 text-sm font-black text-white backdrop-blur-md border border-white/20 transition hover:bg-white/20">
-              <TrendingUp className="h-5 w-5" />
+            <button className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py-3 sm:px-6 text-xs sm:text-sm font-black text-white backdrop-blur-md border border-white/20 transition hover:bg-white/20 whitespace-nowrap">
+              <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5" />
               تقارير التحصيل
             </button>
           </div>

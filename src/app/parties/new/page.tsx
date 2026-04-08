@@ -73,7 +73,7 @@ export default function NewPartyPage() {
 
       if (partyError) throw partyError;
 
-      // 2. Insert Bank Account if provided (Simple version for now)
+  // 2. Insert Bank Account if provided
       if (values.bank_accounts?.[0]?.iban) {
         const { error: bankError } = await supabase.from("party_bank_accounts").insert([
           {
@@ -84,7 +84,10 @@ export default function NewPartyPage() {
             is_default: true,
           },
         ]);
-        if (bankError) throw bankError;
+        if (bankError) {
+          console.error("Bank Error:", bankError);
+          // Don't throw, we already created the party
+        }
       }
 
       return partyData;

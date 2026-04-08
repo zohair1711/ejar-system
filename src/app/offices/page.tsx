@@ -25,7 +25,8 @@ import {
   Hash,
   ShieldCheck,
   Globe,
-  Info
+  Info,
+  Calendar
 } from "lucide-react";
 import Link from "next/link";
 import { 
@@ -44,13 +45,18 @@ import {
   Textarea,
   Button,
   Switch,
-  ActionIcon
+  ActionIcon,
+  Select
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
+import { useDisclosure } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
 
 export default function OfficesPage() {
   const queryClient = useQueryClient();
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [branchModalOpened, { open: openBranchModal, close: closeBranchModal }] = useDisclosure(false);
+  const [agreementModalOpened, { open: openAgreementModal, close: closeAgreementModal }] = useDisclosure(false);
 
   // Fetch first office (assuming single office setup for now)
   const { data: office, isLoading: officeLoading } = useQuery({
@@ -64,6 +70,49 @@ export default function OfficesPage() {
 
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Branch Form
+  const branchForm = useForm({
+    initialValues: {
+      name: "",
+      office_code: "",
+      phone: "",
+      email: "",
+      city: "",
+      is_active: true,
+    },
+    validate: {
+      name: (value) => (value.length > 0 ? null : "اسم الفرع مطلوب"),
+    },
+  });
+
+  // Agreement Form
+  const agreementForm = useForm({
+    initialValues: {
+      agreement_number: "",
+      party_id: "",
+      start_date: "",
+      end_date: "",
+      status: "draft",
+    },
+    validate: {
+      agreement_number: (value) => (value.length > 0 ? null : "رقم الاتفاقية مطلوب"),
+      party_id: (value) => (value ? null : "يجب اختيار الطرف الثاني"),
+    },
+  });
+
+  // Fetch Parties for Agreement Selection
+  const { data: parties } = useQuery({
+    queryKey: ["parties_list"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("parties")
+        .select("id, full_name")
+        .eq("is_active", true);
+      if (error) throw error;
+      return data?.map(p => ({ value: p.id, label: p.full_name })) || [];
     },
   });
 
@@ -215,6 +264,41 @@ export default function OfficesPage() {
     },
   });
 
+  const addBranchMutation = useMutation({
+    mutationFn: async (values: typeof branchForm.values) => {
+      const { data, error } = await supabase
+        .from("offices")
+        .insert([{ ...values, is_active: true }]) // For now, inserting as a new office entry
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      notifications.show({ title: "تمت الإضافة", message: "تم إضافة الفرع بنجاح", color: "green" });
+      closeBranchModal();
+      branchForm.reset();
+    },
+  });
+
+  const addAgreementMutation = useMutation({
+    mutationFn: async (values: typeof agreementForm.values) => {
+      const { data, error } = await supabase
+        .from("brokerage_agreements")
+        .insert([{ ...values, office_id: office.id }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      notifications.show({ title: "تمت الإضافة", message: "تم إضافة اتفاقية الوساطة بنجاح", color: "green" });
+      queryClient.invalidateQueries({ queryKey: ["brokerage_agreements"] });
+      closeAgreementModal();
+      agreementForm.reset();
+    },
+  });
+
   if (officeLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -247,16 +331,19 @@ export default function OfficesPage() {
             </div>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex flex-row gap-2 sm:gap-4">
             <button 
               onClick={() => setEditModalOpen(true)}
-              className="flex items-center gap-2 rounded-2xl bg-white/10 px-6 py-4 text-sm font-black text-white backdrop-blur-md border border-white/20 transition hover:bg-white/20"
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py-3 sm:px-6 sm:py-4 text-xs sm:text-sm font-black text-white backdrop-blur-md border border-white/20 transition hover:bg-white/20 whitespace-nowrap"
             >
-              <Edit className="h-5 w-5" />
+              <Edit className="h-4 w-4 sm:h-5 sm:w-5" />
               تعديل الملف
             </button>
-            <button className="flex items-center gap-2 rounded-2xl bg-white px-8 py-4 text-sm font-black text-emerald-700 shadow-xl transition hover:scale-105 active:scale-95">
-              <Plus className="h-5 w-5" />
+            <button 
+              onClick={openBranchModal}
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 sm:px-8 sm:py-4 text-xs sm:text-sm font-black text-emerald-700 shadow-xl transition hover:scale-105 active:scale-95 whitespace-nowrap"
+            >
+              <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
               إضافة فرع
             </button>
           </div>
@@ -417,6 +504,117 @@ export default function OfficesPage() {
               إلغاء
             </Button>
           </div>
+        </form>
+      </Modal>
+
+      {/* Add Branch Modal */}
+      <Modal
+        opened={branchModalOpened}
+        onClose={closeBranchModal}
+        title={<Text fw={900} size="xl" className="text-emerald-950">إضافة فرع جديد</Text>}
+        radius="32px"
+        padding="xl"
+      >
+        <form onSubmit={branchForm.onSubmit((values) => addBranchMutation.mutate(values))} className="space-y-6">
+          <TextInput
+            label="اسم الفرع"
+            placeholder="مثال: فرع جدة"
+            required
+            {...branchForm.getInputProps("name")}
+            classNames={{ input: "rounded-xl border-emerald-100 font-bold" }}
+          />
+          <TextInput
+            label="كود الفرع"
+            placeholder="مثال: BRANCH-02"
+            {...branchForm.getInputProps("office_code")}
+            classNames={{ input: "rounded-xl border-emerald-100 font-bold" }}
+          />
+          <TextInput
+            label="رقم التواصل"
+            placeholder="05XXXXXXXX"
+            {...branchForm.getInputProps("phone")}
+            classNames={{ input: "rounded-xl border-emerald-100 font-bold" }}
+          />
+          <TextInput
+            label="المدينة"
+            placeholder="جدة"
+            {...branchForm.getInputProps("city")}
+            classNames={{ input: "rounded-xl border-emerald-100 font-bold" }}
+          />
+          <Button 
+            type="submit" 
+            color="emerald" 
+            fullWidth 
+            radius="xl" 
+            size="lg" 
+            className="font-black"
+            loading={addBranchMutation.isPending}
+          >
+            حفظ الفرع
+          </Button>
+        </form>
+      </Modal>
+
+      {/* Add Agreement Modal */}
+      <Modal
+        opened={agreementModalOpened}
+        onClose={closeAgreementModal}
+        title={<Text fw={900} size="xl" className="text-emerald-950">إضافة اتفاقية وساطة</Text>}
+        radius="32px"
+        padding="xl"
+      >
+        <form onSubmit={agreementForm.onSubmit((values) => addAgreementMutation.mutate(values))} className="space-y-6">
+          <TextInput
+            label="رقم الاتفاقية"
+            placeholder="BR-2024-XXXX"
+            required
+            {...agreementForm.getInputProps("agreement_number")}
+            classNames={{ input: "rounded-xl border-emerald-100 font-bold" }}
+          />
+          <Select
+            label="الطرف الثاني (المالك)"
+            placeholder="اختر الطرف الثاني"
+            required
+            data={parties || []}
+            {...agreementForm.getInputProps("party_id")}
+            classNames={{ input: "rounded-xl border-emerald-100 font-bold" }}
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <TextInput
+              label="تاريخ البداية"
+              type="date"
+              required
+              {...agreementForm.getInputProps("start_date")}
+              classNames={{ input: "rounded-xl border-emerald-100 font-bold" }}
+            />
+            <TextInput
+              label="تاريخ النهاية"
+              type="date"
+              required
+              {...agreementForm.getInputProps("end_date")}
+              classNames={{ input: "rounded-xl border-emerald-100 font-bold" }}
+            />
+          </div>
+          <Select
+            label="الحالة"
+            data={[
+              { value: 'draft', label: 'مسودة' },
+              { value: 'active', label: 'نشطة' },
+            ]}
+            {...agreementForm.getInputProps("status")}
+            classNames={{ input: "rounded-xl border-emerald-100 font-bold" }}
+          />
+          <Button 
+            type="submit" 
+            color="emerald" 
+            fullWidth 
+            radius="xl" 
+            size="lg" 
+            className="font-black"
+            loading={addAgreementMutation.isPending}
+          >
+            حفظ الاتفاقية
+          </Button>
         </form>
       </Modal>
 
@@ -631,7 +829,10 @@ export default function OfficesPage() {
                 </div>
                 <h2 className="text-lg font-black text-emerald-950">اتفاقيات الوساطة العقارية</h2>
               </div>
-              <button className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 transition-all shadow-md">
+              <button 
+                onClick={openAgreementModal}
+                className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 transition-all shadow-md"
+              >
                 <Plus size={14} />
                 اتفاقية جديدة
               </button>
