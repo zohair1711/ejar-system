@@ -21,11 +21,60 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { Badge, Group, Stack, Text, ActionIcon, Menu, RingProgress, Progress } from "@mantine/core";
+import { 
+  Badge, 
+  Group, 
+  Stack, 
+  Text, 
+  ActionIcon, 
+  Menu, 
+  RingProgress, 
+  Progress,
+  Modal,
+  TextInput,
+  NumberInput,
+  Select,
+  Button
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { useDisclosure } from "@mantine/hooks";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { notifications } from "@mantine/notifications";
 
 export default function FinancePage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const queryClient = useQueryClient();
+  const [paymentModalOpened, { open: openPaymentModal, close: closePaymentModal }] = useDisclosure(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+
+  const paymentForm = useForm({
+    initialValues: {
+      amount: 0,
+      payment_method: "bank_transfer",
+      transaction_ref: "",
+    },
+  });
+
+  const registerPayment = useMutation({
+    mutationFn: async (values: { amount: number; payment_method: string; transaction_ref: string }) => {
+      const { error } = await supabase
+        .from("payments")
+        .insert([{
+          invoice_id: selectedInvoice.id,
+          amount: values.amount,
+          payment_method: values.payment_method,
+          reference_number: values.transaction_ref, // In the schema, it's reference_number
+          status: 'paid'
+        }]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      notifications.show({ title: "تم السداد", message: "تم تسجيل العملية بنجاح", color: "green" });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      closePaymentModal();
+    }
+  });
 
   const { data: invoices, isLoading, error } = useQuery({
     queryKey: ["invoices", statusFilter],
@@ -255,10 +304,19 @@ export default function FinancePage() {
                       </td>
                       <td className="px-8 py-5 text-left">
                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="flex items-center gap-1 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-700 transition-all">
-                            سداد
-                            <Wallet className="h-3 w-3" />
-                          </button>
+                          {invoice.status !== 'paid' && (
+                            <button 
+                              onClick={() => {
+                                setSelectedInvoice(invoice);
+                                paymentForm.setFieldValue('amount', invoice.total_amount);
+                                openPaymentModal();
+                              }}
+                              className="flex items-center gap-1 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-700 transition-all"
+                            >
+                              سداد
+                              <Wallet className="h-3 w-3" />
+                            </button>
+                          )}
                           
                           <Menu shadow="md" width={180} position="bottom-end" radius="lg">
                             <Menu.Target>
@@ -268,7 +326,7 @@ export default function FinancePage() {
                             </Menu.Target>
                             <Menu.Dropdown>
                               <Menu.Item leftSection={<Download className="h-4 w-4" />}>تحميل الفاتورة</Menu.Item>
-                              <Menu.Item leftSection={<FileText className="h-4 w-4" />}>تفاصيل العقد</Menu.Item>
+                              <Menu.Item component={Link} href={`/contracts/${invoice.contract_id}`} leftSection={<FileText className="h-4 w-4" />}>تفاصيل العقد</Menu.Item>
                               <Menu.Divider />
                               <Menu.Item color="red" leftSection={<AlertCircle className="h-4 w-4" />}>إلغاء الفاتورة</Menu.Item>
                             </Menu.Dropdown>
@@ -299,6 +357,26 @@ export default function FinancePage() {
           )}
         </div>
       </section>
+
+      {/* Payment Modal */}
+      <Modal opened={paymentModalOpened} onClose={closePaymentModal} title={<Text fw={900}>تسجيل عملية سداد</Text>} centered radius="32px" padding="xl">
+        <form onSubmit={paymentForm.onSubmit((values) => registerPayment.mutate(values))}>
+          <Stack gap="md">
+            <NumberInput label="المبلغ المراد سداده" required {...paymentForm.getInputProps('amount')} />
+            <Select 
+              label="طريقة السداد" 
+              data={[
+                { value: 'bank_transfer', label: 'تحويل بنكي' },
+                { value: 'cash', label: 'نقدي' },
+                { value: 'mada', label: 'مدى / بطاقة ائتمانية' }
+              ]} 
+              {...paymentForm.getInputProps('payment_method')}
+            />
+            <TextInput label="رقم المرجع / العملية" placeholder="رقم التحويل أو الوصل" {...paymentForm.getInputProps('transaction_ref')} />
+            <Button type="submit" fullWidth radius="xl" size="lg" color="emerald" loading={registerPayment.isPending} className="font-black mt-4">تأكيد السداد</Button>
+          </Stack>
+        </form>
+      </Modal>
     </main>
   );
 }

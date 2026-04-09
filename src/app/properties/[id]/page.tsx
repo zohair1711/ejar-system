@@ -316,6 +316,11 @@ export default function PropertyDetailsPage() {
               <InfoRow label="نوع العقار" value={property?.property_type === 'residential' ? 'سكني' : 'تجاري'} />
               <InfoRow label="كود العقار" value={property?.property_code} />
               <InfoRow label="المكتب التابع" value={(property as any).offices?.name || "مكتب رئيسي"} />
+              <InfoRow label="حالة الربط (إيجار)" value={
+                <Badge variant="dot" color={property?.ejar_property_id ? 'emerald' : 'gray'}>
+                  {property?.ejar_property_id ? 'متصل' : 'غير متصل'}
+                </Badge>
+              } />
               <div className="pt-2 border-t border-emerald-50">
                 <p className="text-[10px] font-black text-emerald-800/30 uppercase tracking-widest mb-2">وصف العقار</p>
                 <p className="text-sm font-bold text-emerald-900/70 leading-relaxed">
@@ -446,6 +451,12 @@ export default function PropertyDetailsPage() {
                                <LayoutGrid size={14} className="text-emerald-400" />
                                <span>{unit.bedrooms || 0} غرف</span>
                             </div>
+                            {unit.ejar_unit_id && (
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg">
+                                <CheckCircle2 size={12} />
+                                <span>موثق</span>
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex items-center justify-between border-t border-emerald-50 pt-5">

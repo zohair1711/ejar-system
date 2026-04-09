@@ -10,6 +10,8 @@ import { ArrowRight, Save, Loader2, Home, Info, Ruler, ChevronLeft, Plus } from 
 import Link from "next/link";
 import { Badge } from "@mantine/core";
 
+import { EjarUnitTypes, EjarUsageTypes } from "@/lib/ejar-lookups";
+
 const unitSchema = z.object({
   property_id: z.string().uuid(),
   unit_number: z.string().min(1, "يرجى إدخال رقم الوحدة"),
@@ -22,6 +24,8 @@ const unitSchema = z.object({
   furnished: z.boolean().default(false),
   electricity_no: z.string().optional(),
   water_no: z.string().optional(),
+  meter_info: z.string().optional(),
+  advertisement_number: z.string().optional(),
   rent_expected: z.coerce.number().min(0, "السعر يجب أن يكون موجباً"),
   status: z.string().default("available"),
   description: z.string().optional(),
@@ -132,11 +136,9 @@ export default function NewUnitPage() {
                   {...register("unit_type")}
                   className={`w-full rounded-2xl border ${errors.unit_type ? 'border-rose-500' : 'border-emerald-100'} bg-white p-3.5 text-sm font-bold text-emerald-950 outline-none transition-all focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5`}
                 >
-                  <option value="apartment">شقة</option>
-                  <option value="shop">محل</option>
-                  <option value="office">مكتب</option>
-                  <option value="villa">فيلا</option>
-                  <option value="warehouse">مستودع</option>
+                  {EjarUnitTypes.map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
                 </select>
                 {errors.unit_type && <p className="text-xs font-bold text-rose-500">{errors.unit_type.message}</p>}
               </div>
@@ -157,8 +159,9 @@ export default function NewUnitPage() {
                   {...register("usage_type")}
                   className="w-full rounded-2xl border border-emerald-100 bg-white p-3.5 text-sm font-bold text-emerald-950 outline-none transition-all focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5"
                 >
-                  <option value="residential">سكني</option>
-                  <option value="commercial">تجاري</option>
+                  {EjarUsageTypes.map((usage) => (
+                    <option key={usage.value} value={usage.value}>{usage.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -266,6 +269,7 @@ export default function NewUnitPage() {
                 <input
                   type="text"
                   {...register("electricity_no")}
+                  placeholder="رقم العداد أو الحساب"
                   className="w-full rounded-2xl border border-emerald-100 bg-white p-3.5 text-sm font-bold text-emerald-950 outline-none transition-all focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 placeholder:text-emerald-200"
                 />
               </div>
@@ -275,6 +279,27 @@ export default function NewUnitPage() {
                 <input
                   type="text"
                   {...register("water_no")}
+                  placeholder="رقم العداد أو الحساب"
+                  className="w-full rounded-2xl border border-emerald-100 bg-white p-3.5 text-sm font-bold text-emerald-950 outline-none transition-all focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 placeholder:text-emerald-200"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-sm font-black text-emerald-800/60 uppercase tracking-widest text-blue-600">رقم الإعلان (إيجار)</label>
+                <input
+                  type="text"
+                  {...register("advertisement_number")}
+                  placeholder="مثال: 7123456"
+                  className="w-full rounded-2xl border border-blue-100 bg-blue-50/10 p-3.5 text-sm font-bold text-emerald-950 outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 placeholder:text-emerald-200"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-sm font-black text-emerald-800/60 uppercase tracking-widest">معلومات العدادات الأخرى</label>
+                <input
+                  type="text"
+                  {...register("meter_info")}
+                  placeholder="غاز، خدمات أخرى..."
                   className="w-full rounded-2xl border border-emerald-100 bg-white p-3.5 text-sm font-bold text-emerald-950 outline-none transition-all focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 placeholder:text-emerald-200"
                 />
               </div>
