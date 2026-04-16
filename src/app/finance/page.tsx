@@ -20,7 +20,7 @@ import {
   Wallet
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Badge, 
   Group, 
@@ -47,6 +47,11 @@ export default function FinancePage() {
   const queryClient = useQueryClient();
   const [paymentModalOpened, { open: openPaymentModal, close: closePaymentModal }] = useDisclosure(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const paymentForm = useForm({
     initialValues: {
@@ -292,7 +297,7 @@ export default function FinancePage() {
                       </td>
                       <td className="px-8 py-5">
                         <span className="font-black text-emerald-950 text-lg">
-                          {invoice.total_amount?.toLocaleString()}
+                          {invoice.total_amount?.toLocaleString('ar-SA')}
                         </span>
                         <span className="text-[10px] font-bold text-emerald-500 mr-1">ر.س</span>
                       </td>
@@ -451,5 +456,5 @@ function getStatusIcon(status: string) {
 
 function formatCurrency(n?: number | null) {
   const x = Number(n || 0);
-  return `${x.toLocaleString()} ر.س`;
+  return `${x.toLocaleString('ar-SA')} ر.س`;
 }

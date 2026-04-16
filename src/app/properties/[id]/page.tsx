@@ -462,7 +462,7 @@ export default function PropertyDetailsPage() {
                           <div className="flex items-center justify-between border-t border-emerald-50 pt-5">
                             <div className="flex flex-col">
                               <span className="text-[10px] font-black text-emerald-800/30 uppercase tracking-tighter leading-none">الإيجار السنوي</span>
-                              <span className="text-sm font-black text-emerald-900 mt-1">{unit.rent_expected?.toLocaleString()} <span className="text-[10px] text-emerald-500">ريال</span></span>
+                              <span className="text-sm font-black text-emerald-900 mt-1">{unit.rent_expected?.toLocaleString('ar-SA')} <span className="text-[10px] text-emerald-500">ريال</span></span>
                             </div>
                             <div className="flex items-center gap-2">
                               <button className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all shadow-sm">

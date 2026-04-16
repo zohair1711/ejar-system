@@ -8,9 +8,11 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Save, Loader2, Building, User, MapPin, Calendar, FileText, ChevronLeft, Plus, Trash2, Info, CheckCircle2, DollarSign, Settings2, ShieldCheck, Briefcase } from "lucide-react";
 import Link from "next/link";
-import { Badge, Stepper, Button, Group, TextInput, NumberInput, Select, MultiSelect, Checkbox, Textarea, Divider, Text, Paper, SimpleGrid, Stack, ActionIcon, Tooltip } from "@mantine/core";
-import { useState } from "react";
+import { Badge, Stepper, Button, Group, TextInput, NumberInput, Select, MultiSelect, Checkbox, Textarea, Divider, Text, Paper, SimpleGrid, Stack, ActionIcon, Tooltip, Table } from "@mantine/core";
+import { useState, useMemo, useEffect } from "react";
 import { notifications } from "@mantine/notifications";
+import { differenceInMonths, parseISO, addMonths, format, isValid } from "date-fns";
+import { ar } from "date-fns/locale";
 
 const contractSchema = z.object({
   // Basic Info
@@ -20,8 +22,8 @@ const contractSchema = z.object({
   contract_category: z.enum(["residential", "commercial"]),
 
   // Parties
-  lessor_party_id: z.string().uuid("يرجى اختيار المؤجر"),
-  tenant_party_id: z.string().uuid("يرجى اختيار المستأجر"),
+  lessor_party_id: z.string().uuid("يرجى اختيار المؤجر").optional().nullable(),
+  tenant_party_id: z.string().uuid("يرجى اختيار المستأجر").optional().nullable(),
 
   // Dates & Numbers
   contract_number_internal: z.string().min(1, "يرجى إدخال رقم العقد الداخلي"),
@@ -31,19 +33,22 @@ const contractSchema = z.object({
   // Financial Info
   rent_amount: z.coerce.number().min(0, "يجب أن يكون مبلغ الإيجار 0 أو أكثر"),
   payment_frequency: z.enum(["monthly", "quarterly", "semi-annual", "annual"]),
-  payment_method: z.string().optional(),
+  payment_method: z.string().optional().nullable(),
   security_deposit: z.coerce.number().min(0).default(0),
   brokerage_fee: z.coerce.number().min(0).default(0),
   vat_amount: z.coerce.number().min(0).default(0),
   lessor_iban_id: z.string().uuid().optional().nullable(),
   tenant_iban_id: z.string().uuid().optional().nullable(),
 
+  // Status
+  status_internal: z.enum(["draft", "ready", "active"]).default("draft"),
+
   // Services
   services: z.array(z.object({
     service_name: z.string().min(1, "اسم الخدمة مطلوب"),
-    service_type: z.string().optional(),
+    service_type: z.string().optional().nullable(),
     amount: z.coerce.number().min(0).default(0),
-    billing_cycle: z.string().optional(),
+    billing_cycle: z.string().optional().nullable(),
   })).default([]),
 
   // Fees
@@ -60,14 +65,19 @@ type ContractFormValues = z.infer<typeof contractSchema>;
 export default function NewContractPage() {
   const router = useRouter();
   const [activeStep, setActiveStep] = useState(0);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const {
     register,
     handleSubmit,
-    watch,
-    setValue,
     control,
+    watch,
     trigger,
+    setValue,
     formState: { errors },
   } = useForm<ContractFormValues>({
     resolver: zodResolver(contractSchema) as any,
@@ -97,6 +107,53 @@ export default function NewContractPage() {
    const selectedPropertyId = watch("property_id");
    const selectedLessorId = watch("lessor_party_id");
    const selectedTenantId = watch("tenant_party_id");
+  const startDate = watch("start_date");
+  const endDate = watch("end_date");
+  const rentAmount = watch("rent_amount");
+  const paymentFrequency = watch("payment_frequency");
+
+  // Calculate Duration and Payments
+  const contractStats = useMemo(() => {
+    if (!startDate || !endDate || !rentAmount) return null;
+    
+    const start = parseISO(startDate);
+    const end = parseISO(endDate);
+    
+    if (!isValid(start) || !isValid(end)) return null;
+    
+    const totalMonths = differenceInMonths(end, start) + 1;
+    if (totalMonths <= 0) return null;
+
+    let frequencyMonths = 1;
+    if (paymentFrequency === 'quarterly') frequencyMonths = 3;
+    if (paymentFrequency === 'semi-annual') frequencyMonths = 6;
+    if (paymentFrequency === 'annual') frequencyMonths = 12;
+
+    const numberOfPayments = Math.ceil(totalMonths / frequencyMonths);
+    
+    // Calculate payment amount based on total months and annual rent
+    // Formula: (Annual Rent / 12) * frequencyMonths
+    const monthlyRent = rentAmount / 12;
+    const paymentAmount = monthlyRent * frequencyMonths;
+
+    const payments = [];
+    for (let i = 0; i < numberOfPayments; i++) {
+      const paymentDate = addMonths(start, i * frequencyMonths);
+      payments.push({
+        date: format(paymentDate, 'yyyy-MM-dd'),
+        amount: paymentAmount,
+        label: `الدفعة ${i + 1}`
+      });
+    }
+
+    return {
+      totalMonths,
+      numberOfPayments,
+      paymentAmount,
+      monthlyRent,
+      payments
+    };
+  }, [startDate, endDate, rentAmount, paymentFrequency]);
 
   // Fetch Bank Accounts for Lessor
   const { data: lessorBankAccounts } = useQuery({
@@ -167,7 +224,7 @@ export default function NewContractPage() {
   });
 
   const createContract = useMutation({
-    mutationFn: async (values: ContractFormValues) => {
+    mutationFn: async ({ values, isDraft }: { values: ContractFormValues, isDraft: boolean }) => {
       // 1. Insert into contracts
       const { data: contractData, error: contractError } = await supabase
         .from("contracts")
@@ -182,6 +239,7 @@ export default function NewContractPage() {
             start_date: values.start_date,
             end_date: values.end_date,
             contract_category: values.contract_category,
+            status_internal: isDraft ? 'draft' : 'ready',
           },
         ])
         .select()
@@ -209,7 +267,23 @@ export default function NewContractPage() {
 
       if (financialError) throw financialError;
 
-      // 3. Insert services
+      // 3. Insert scheduled payments if not draft
+      if (!isDraft && contractStats) {
+        const { error: paymentsError } = await supabase
+          .from("contract_invoices")
+          .insert(
+            contractStats.payments.map(p => ({
+              contract_id: contractData.id,
+              amount: p.amount,
+              due_date: p.date,
+              status: 'pending',
+              invoice_type: 'rent'
+            }))
+          );
+        if (paymentsError) throw paymentsError;
+      }
+
+      // 4. Insert services
       if (values.services && values.services.length > 0) {
         const { error: servicesError } = await supabase
           .from("contract_unit_services")
@@ -225,7 +299,7 @@ export default function NewContractPage() {
         if (servicesError) throw servicesError;
       }
 
-      // 4. Insert fees
+      // 5. Insert fees
       if (values.fees && values.fees.length > 0) {
         const { error: feesError } = await supabase
           .from("contract_rental_fees")
@@ -243,10 +317,10 @@ export default function NewContractPage() {
 
       return contractData;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       notifications.show({
         title: "تم بنجاح",
-        message: "تم إنشاء العقد بنجاح",
+        message: variables.isDraft ? "تم حفظ العقد كمسودة بنجاح" : "تم إنشاء العقد بنجاح",
         color: "emerald",
         icon: <CheckCircle2 size={18} />,
       });
@@ -280,7 +354,21 @@ export default function NewContractPage() {
   const prevStep = () => setActiveStep((current) => (current > 0 ? current - 1 : current));
 
   const onSubmit = (values: ContractFormValues) => {
-    createContract.mutate(values);
+    createContract.mutate({ values, isDraft: false });
+  };
+
+  const onSaveDraft = () => {
+    const values = watch();
+    // We allow saving draft even with incomplete data, but office_id is usually needed for RLS/Logic
+    if (!values.office_id) {
+      notifications.show({
+        title: "تنبيه",
+        message: "يجب اختيار المكتب العقاري أولاً لحفظ المسودة",
+        color: "orange",
+      });
+      return;
+    }
+    createContract.mutate({ values, isDraft: true });
   };
 
   return (
@@ -290,25 +378,40 @@ export default function NewContractPage() {
         <div className="absolute -left-10 top-0 h-40 w-40 rounded-full bg-emerald-400/20 blur-3xl"></div>
         <div className="absolute bottom-0 right-0 h-48 w-48 rounded-full bg-teal-400/20 blur-3xl"></div>
 
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-6">
-            <Link
-              href="/contracts"
-              className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-white backdrop-blur-md border border-white/20 transition hover:bg-white/20"
-            >
-              <ArrowRight className="h-6 w-6" />
-            </Link>
-            <div>
-              <Badge variant="filled" color="emerald.4" size="sm" radius="xl" mb="xs">
-                إدارة العقود
-              </Badge>
-              <h1 className="text-3xl font-black leading-tight md:text-4xl">
-                إنشاء عقد جديد
-              </h1>
-              <p className="mt-1 text-sm font-medium text-emerald-50/80">قم بتعبئة البيانات التالية لإنشاء عقد إيجار</p>
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-6">
+              <Link
+                href="/contracts"
+                className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-white backdrop-blur-md border border-white/20 transition hover:bg-white/20"
+              >
+                <ArrowRight className="h-6 w-6" />
+              </Link>
+              <div>
+                <Badge variant="filled" color="emerald.4" size="sm" radius="xl" mb="xs">
+                  إدارة العقود
+                </Badge>
+                <h1 className="text-3xl font-black leading-tight md:text-4xl">
+                  إنشاء عقد جديد
+                </h1>
+                <p className="mt-1 text-sm font-medium text-emerald-50/80">قم بتعبئة البيانات التالية لإنشاء عقد إيجار</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="white"
+                color="emerald"
+                radius="xl"
+                size="md"
+                className="font-black"
+                leftSection={<FileText size={18} />}
+                onClick={onSaveDraft}
+                loading={createContract.isPending}
+              >
+                حفظ كمسودة
+              </Button>
             </div>
           </div>
-        </div>
       </div>
 
       <div className="mx-auto max-w-5xl">
@@ -528,6 +631,23 @@ export default function NewContractPage() {
                     </div>
                   </div>
                 </SimpleGrid>
+
+                {isMounted && contractStats && (
+                  <Paper withBorder p="xl" radius="24px" className="border-emerald-100 bg-emerald-50/10">
+                    <Group justify="space-between" mb="md">
+                      <div className="flex items-center gap-2">
+                        <Calendar size={20} className="text-emerald-600" />
+                        <Text fw={900} className="text-emerald-900">ملخص مدة العقد</Text>
+                      </div>
+                      <Badge variant="light" color="emerald" size="lg" radius="md">
+                        مدة العقد: {contractStats.totalMonths} شهر
+                      </Badge>
+                    </Group>
+                    <Text size="sm" fw={700} c="emerald.8" mb="xl">
+                      بناءً على التواريخ المختارة، سيتم تقسيم دفعات العقد حسب دورة الدفع المحددة.
+                    </Text>
+                  </Paper>
+                )}
               </Stack>
             </Paper>
           </Stepper.Step>
@@ -544,7 +664,7 @@ export default function NewContractPage() {
                   <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
                     <DollarSign className="h-5 w-5" />
                   </div>
-                  <h2 className="text-xl font-black text-emerald-950">التفاصيل المالية</h2>
+                  <h2 className="text-xl font-black text-emerald-950">التفاصيل المالية وجدولة الدفعات</h2>
                 </div>
 
                 <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
@@ -559,6 +679,14 @@ export default function NewContractPage() {
                       />
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-emerald-500 uppercase">ريال</span>
                     </div>
+                    {isMounted && contractStats && (
+                      <div className="flex items-center gap-2 mt-2 px-2">
+                        <Info size={14} className="text-emerald-500" />
+                        <Text size="xs" fw={700} c="emerald.7">
+                          الإيجار الشهري: {contractStats.monthlyRent.toLocaleString('ar-SA', { maximumFractionDigits: 2 })} ريال
+                        </Text>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-3">
@@ -567,13 +695,61 @@ export default function NewContractPage() {
                       {...register("payment_frequency")}
                       className="w-full rounded-2xl border border-emerald-100 bg-white p-3.5 text-sm font-bold text-emerald-950 outline-none transition-all focus:border-emerald-500"
                     >
-                      <option value="monthly">شهري</option>
-                      <option value="quarterly">ربع سنوي</option>
-                      <option value="semi-annual">نصف سنوي</option>
-                      <option value="annual">سنوي</option>
+                      <option value="monthly">شهري (كل شهر)</option>
+                      <option value="quarterly">ربع سنوي (كل 3 أشهر)</option>
+                      <option value="semi-annual">نصف سنوي (كل 6 أشهر)</option>
+                      <option value="annual">سنوي (كل 12 شهر)</option>
                     </select>
+                    {isMounted && contractStats && (
+                      <div className="flex items-center gap-2 mt-2 px-2">
+                        <Info size={14} className="text-emerald-500" />
+                        <Text size="xs" fw={700} c="emerald.7">
+                          قيمة كل دفعة: {contractStats.paymentAmount.toLocaleString('ar-SA', { maximumFractionDigits: 2 })} ريال
+                        </Text>
+                      </div>
+                    )}
                   </div>
+                </SimpleGrid>
 
+                {isMounted && contractStats && (
+                  <div className="mt-4 space-y-4">
+                    <Divider label="جدول الدفعات المتوقع" labelPosition="center" />
+                    <div className="overflow-hidden rounded-2xl border border-emerald-100">
+                      <Table verticalSpacing="sm" highlightOnHover>
+                        <Table.Thead className="bg-emerald-50">
+                          <Table.Tr>
+                            <Table.Th className="text-right">الدفعة</Table.Th>
+                            <Table.Th className="text-right">التاريخ المستحق</Table.Th>
+                            <Table.Th className="text-left">المبلغ</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {contractStats.payments.map((p, idx) => (
+                            <Table.Tr key={idx}>
+                              <Table.Td fw={700}>{p.label}</Table.Td>
+                              <Table.Td fw={700} className="text-emerald-700">
+                                {format(parseISO(p.date), 'dd MMMM yyyy', { locale: ar })}
+                              </Table.Td>
+                              <Table.Td fw={900} className="text-left text-emerald-900">
+                                {p.amount.toLocaleString('ar-SA')} <span className="text-[10px] font-bold text-emerald-500">ريال</span>
+                              </Table.Td>
+                            </Table.Tr>
+                          ))}
+                        </Table.Tbody>
+                        <Table.Tfoot className="bg-emerald-50/50">
+                          <Table.Tr>
+                            <Table.Td colSpan={2} fw={900} className="text-emerald-900">إجمالي دفعات الإيجار:</Table.Td>
+                            <Table.Td fw={900} className="text-left text-emerald-900">
+                              {(contractStats.paymentAmount * contractStats.numberOfPayments).toLocaleString('ar-SA')} ريال
+                            </Table.Td>
+                          </Table.Tr>
+                        </Table.Tfoot>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+
+                <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
                   <div className="space-y-3">
                     <label className="text-sm font-black text-emerald-800/60 uppercase tracking-widest text-orange-600">مبلغ الضمان (تأمين)</label>
                     <div className="relative">

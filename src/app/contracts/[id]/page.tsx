@@ -254,7 +254,7 @@ export default function ContractDetailsPage() {
                         <ThemeIcon variant="light" color="emerald" radius="md"><Zap size={18} /></ThemeIcon>
                         <Text fw={900} className="text-emerald-950">{getServiceLabel(service.service_type)}</Text>
                       </div>
-                      <Text fw={900} c="emerald.7">{service.amount} ر.س</Text>
+                      <Text fw={900} c="emerald.7">{service.amount?.toLocaleString('ar-SA')} ر.س</Text>
                     </Group>
                   </Paper>
                 ))}

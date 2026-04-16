@@ -9,6 +9,7 @@ import { useRouter, useParams } from "next/navigation";
 import { ArrowRight, Save, Loader2, Home, Info, Ruler, ChevronLeft, Plus } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 
 import { EjarUnitTypes, EjarUsageTypes } from "@/lib/ejar-lookups";
 
@@ -55,6 +56,7 @@ export default function NewUnitPage() {
   // Fetch Property Name for header
   const { data: property } = useQuery({
     queryKey: ["property", propertyId],
+    enabled: !!propertyId,
     queryFn: async () => {
       const { data, error } = await supabase.from("properties").select("name").eq("id", propertyId).single();
       if (error) throw error;
@@ -64,14 +66,29 @@ export default function NewUnitPage() {
 
   const createUnit = useMutation({
     mutationFn: async (values: UnitFormValues) => {
+      if (!propertyId) throw new Error("لم يتم العثور على العقار");
       const { data, error } = await supabase.from("units").insert([values]).select();
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
+      notifications.show({
+        title: "تمت الإضافة بنجاح",
+        message: "تم إضافة الوحدة للعقار بنجاح",
+        color: "emerald",
+        radius: "lg",
+      });
       router.push(`/properties/${propertyId}`);
       router.refresh();
     },
+    onError: (error: any) => {
+      notifications.show({
+        title: "خطأ في الإضافة",
+        message: error.message || "تعذر إضافة الوحدة، يرجى المحاولة لاحقاً",
+        color: "rose",
+        radius: "lg",
+      });
+    }
   });
 
   const onSubmit = (values: UnitFormValues) => {

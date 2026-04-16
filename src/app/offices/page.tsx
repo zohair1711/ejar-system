@@ -170,19 +170,52 @@ export default function OfficesPage() {
         address_json: { city, district, street, building_no, postal_code }
       };
       
-      const { data, error } = await supabase
-        .from("offices")
-        .update(payload)
-        .eq("id", office.id)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const query = supabase.from("offices");
+      
+      let result;
+      if (office?.id) {
+        // Update existing record if office exists
+        result = await query
+          .update(payload)
+          .eq("id", office.id)
+          .select()
+          .single();
+      } else {
+        // Create new record if no office exists in the system yet
+        result = await query
+          .insert([payload])
+          .select()
+          .single();
+      }
+      
+      if (result.error) throw result.error;
+      return result.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["office_profile"] });
+      notifications.show({
+        title: "تم الحفظ بنجاح",
+        message: "تم تحديث بيانات المكتب العقاري ومزامنتها مع النظام",
+        color: "emerald",
+        icon: <CheckCircle2 size={18} />,
+        radius: "lg",
+        styles: {
+          root: { backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' },
+          title: { color: '#064e3b', fontWeight: 900 },
+          description: { color: '#14532d', fontWeight: 600 }
+        }
+      });
       setEditModalOpen(false);
     },
+    onError: (error: any) => {
+      notifications.show({
+        title: "خطأ في الحفظ",
+        message: error.message || "تعذر تحديث البيانات، يرجى المحاولة لاحقاً",
+        color: "rose",
+        icon: <AlertCircle size={18} />,
+        radius: "lg"
+      });
+    }
   });
 
   // Fetch stats
@@ -379,46 +412,104 @@ export default function OfficesPage() {
               classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
             />
             <TextInput
-              label="رقم السجل التجاري"
+              label={
+                <Group gap={4}>
+                  <Text size="sm" fw={900} className="text-emerald-900">رقم السجل التجاري</Text>
+                  <Badge size="xs" color="emerald.0" className="text-emerald-700">مطلوب في إيجار</Badge>
+                </Group>
+              }
               placeholder="مثال: 1010XXXXXX"
               {...form.getInputProps("commercial_registration")}
-              classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+              required
+              classNames={{ 
+                input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14 transition-all focus:ring-4 focus:ring-emerald-500/5",
+                label: "mb-2"
+              }}
+              leftSection={<FileText size={18} className="text-emerald-400" />}
             />
             <TextInput
-              label="الرقم الموحد (700)"
+              label={
+                <Group gap={4}>
+                  <Text size="sm" fw={900} className="text-emerald-900">الرقم الموحد (700)</Text>
+                  <Badge size="xs" color="emerald.0" className="text-emerald-700">مطلوب في إيجار</Badge>
+                </Group>
+              }
               placeholder="مثال: 700XXXXXXX"
               {...form.getInputProps("unified_number")}
-              classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+              required
+              classNames={{ 
+                input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14 transition-all focus:ring-4 focus:ring-emerald-500/5",
+                label: "mb-2"
+              }}
+              leftSection={<Hash size={18} className="text-emerald-400" />}
             />
             <TextInput
-              label="رقم ترخيص الوساطة (REGA)"
+              label={
+                <Group gap={4}>
+                  <Text size="sm" fw={900} className="text-emerald-900">رقم ترخيص الوساطة (REGA)</Text>
+                  <Badge size="xs" color="blue.0" className="text-blue-700">هيئة العقار</Badge>
+                </Group>
+              }
               placeholder="مثال: 1200XXXXXX"
               {...form.getInputProps("brokerage_license_number")}
-              classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+              required
+              classNames={{ 
+                input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14 transition-all focus:ring-4 focus:ring-emerald-500/5",
+                label: "mb-2"
+              }}
+              leftSection={<ShieldCheck size={18} className="text-emerald-400" />}
             />
             <TextInput
-              label="الرقم الضريبي (VAT)"
+              label={
+                <Group gap={4}>
+                  <Text size="sm" fw={900} className="text-emerald-900">الرقم الضريبي (VAT)</Text>
+                  <Badge size="xs" color="gray.0" className="text-gray-700">اختياري</Badge>
+                </Group>
+              }
               placeholder="مثال: 300XXXXXXXXXXXX"
               {...form.getInputProps("tax_number")}
-              classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+              classNames={{ 
+                input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14 transition-all focus:ring-4 focus:ring-emerald-500/5",
+                label: "mb-2"
+              }}
+              leftSection={<CreditCard size={18} className="text-emerald-400" />}
             />
             <TextInput
-              label="رقم تعريف إيجار (Ejar ID)"
+              label={
+                <Group gap={4}>
+                  <Text size="sm" fw={900} className="text-emerald-900">رقم تعريف إيجار (Ejar ID)</Text>
+                  <Badge size="xs" color="emerald.1" className="text-emerald-800">معرف الربط</Badge>
+                </Group>
+              }
               placeholder="مثال: EJ-XXXXX"
               {...form.getInputProps("ejar_office_id")}
-              classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+              classNames={{ 
+                input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14 transition-all focus:ring-4 focus:ring-emerald-500/5",
+                label: "mb-2"
+              }}
+              leftSection={<Building size={18} className="text-emerald-400" />}
             />
             <TextInput
               label="رقم التواصل"
               placeholder="مثال: 05XXXXXXXX"
               {...form.getInputProps("phone")}
-              classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+              required
+              classNames={{ 
+                input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14 transition-all focus:ring-4 focus:ring-emerald-500/5",
+                label: "mb-2 text-emerald-900"
+              }}
+              leftSection={<Phone size={18} className="text-emerald-400" />}
             />
             <TextInput
-              label="البريد الإلكتروني"
+              label="البريد الإلكتروني الرسمي"
               placeholder="office@example.com"
               {...form.getInputProps("email")}
-              classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+              required
+              classNames={{ 
+                input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14 transition-all focus:ring-4 focus:ring-emerald-500/5",
+                label: "mb-2 text-emerald-900"
+              }}
+              leftSection={<Mail size={18} className="text-emerald-400" />}
             />
           </div>
 
@@ -432,31 +523,36 @@ export default function OfficesPage() {
                   label="المدينة"
                   placeholder="مثال: الرياض"
                   {...form.getInputProps("city")}
-                  classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+                  required
+                  classNames={{ input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14" }}
                 />
                 <TextInput
                   label="الحي"
                   placeholder="مثال: الملز"
                   {...form.getInputProps("district")}
-                  classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+                  required
+                  classNames={{ input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14" }}
                 />
                 <TextInput
                   label="الشارع"
                   placeholder="مثال: شارع الأمير سلطان"
                   {...form.getInputProps("street")}
-                  classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+                  required
+                  classNames={{ input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14" }}
                 />
                 <TextInput
                   label="رقم المبنى"
                   placeholder="مثال: 1234"
                   {...form.getInputProps("building_no")}
-                  classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+                  required
+                  classNames={{ input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14" }}
                 />
                 <TextInput
                   label="الرمز البريدي"
                   placeholder="مثال: 12345"
                   {...form.getInputProps("postal_code")}
-                  classNames={{ input: "rounded-xl border-emerald-100 focus:border-emerald-500 font-bold h-12" }}
+                  required
+                  classNames={{ input: "rounded-2xl border-emerald-100 bg-emerald-50/20 focus:border-emerald-500 font-bold h-14" }}
                 />
              </div>
           </div>

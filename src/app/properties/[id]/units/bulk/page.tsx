@@ -10,6 +10,8 @@ import { ArrowRight, Save, Loader2, LayoutGrid, Info, Plus, Trash2, Home, CheckC
 import Link from "next/link";
 import { Badge, Table, Checkbox, Group, Text, ActionIcon } from "@mantine/core";
 import { useState, useEffect } from "react";
+import { notifications } from "@mantine/notifications";
+import { EjarUnitTypes, EjarUsageTypes } from "@/lib/ejar-lookups";
 
 const bulkSchema = z.object({
   total_floors: z.coerce.number().min(1, "يرجى إدخال عدد الأدوار"),
@@ -91,6 +93,7 @@ export default function BulkUnitsPage() {
   // Fetch Property Name
   const { data: property } = useQuery({
     queryKey: ["property", propertyId],
+    enabled: !!propertyId,
     queryFn: async () => {
       const { data, error } = await supabase.from("properties").select("name").eq("id", propertyId).single();
       if (error) throw error;
@@ -100,6 +103,8 @@ export default function BulkUnitsPage() {
 
   const createUnits = useMutation({
     mutationFn: async (units: UnitPreview[]) => {
+      if (!propertyId) throw new Error("لم يتم العثور على العقار");
+
       const payload = units.map(u => ({
         ...u,
         property_id: propertyId,
@@ -111,9 +116,23 @@ export default function BulkUnitsPage() {
       return data;
     },
     onSuccess: () => {
+      notifications.show({
+        title: "تمت الإضافة بنجاح",
+        message: `تم إضافة ${previews.length} وحدة للعقار بنجاح`,
+        color: "emerald",
+        radius: "lg",
+      });
       router.push(`/properties/${propertyId}`);
       router.refresh();
     },
+    onError: (error: any) => {
+      notifications.show({
+        title: "خطأ في الإضافة",
+        message: error.message || "تعذر إضافة الوحدات، يرجى المحاولة لاحقاً",
+        color: "rose",
+        radius: "lg",
+      });
+    }
   });
 
   const onSubmit = () => {
@@ -198,11 +217,9 @@ export default function BulkUnitsPage() {
                   {...register("default_unit_type")}
                   className="w-full rounded-xl border border-emerald-100 bg-emerald-50/30 p-3 text-sm font-bold outline-none focus:border-emerald-500"
                 >
-                  <option value="apartment">شقة</option>
-                  <option value="shop">محل</option>
-                  <option value="office">مكتب</option>
-                  <option value="villa">فيلا</option>
-                  <option value="warehouse">مستودع</option>
+                  {EjarUnitTypes.map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -212,8 +229,9 @@ export default function BulkUnitsPage() {
                   {...register("default_usage_type")}
                   className="w-full rounded-xl border border-emerald-100 bg-emerald-50/30 p-3 text-sm font-bold outline-none focus:border-emerald-500"
                 >
-                  <option value="residential">سكني</option>
-                  <option value="commercial">تجاري</option>
+                  {EjarUsageTypes.map((usage) => (
+                    <option key={usage.value} value={usage.value}>{usage.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -255,29 +273,29 @@ export default function BulkUnitsPage() {
 
             <div className="max-h-[600px] overflow-y-auto px-4">
               <Table verticalSpacing="md" horizontalSpacing="lg">
-                <thead className="sticky top-0 bg-white z-10">
-                  <tr>
-                    <th className="text-[10px] font-black text-emerald-800/40 uppercase tracking-widest text-right">رقم الوحدة</th>
-                    <th className="text-[10px] font-black text-emerald-800/40 uppercase tracking-widest text-right">الدور</th>
-                    <th className="text-[10px] font-black text-emerald-800/40 uppercase tracking-widest text-right">النوع</th>
-                    <th className="text-[10px] font-black text-emerald-800/40 uppercase tracking-widest text-right">الإيجار المتوقع</th>
-                    <th className="text-[10px] font-black text-emerald-800/40 uppercase tracking-widest text-right">الإجراء</th>
-                  </tr>
-                </thead>
-                <tbody>
+                <Table.Thead className="sticky top-0 bg-white z-10">
+                  <Table.Tr>
+                    <Table.Th className="text-[10px] font-black text-emerald-800/40 uppercase tracking-widest text-right">رقم الوحدة</Table.Th>
+                    <Table.Th className="text-[10px] font-black text-emerald-800/40 uppercase tracking-widest text-right">الدور</Table.Th>
+                    <Table.Th className="text-[10px] font-black text-emerald-800/40 uppercase tracking-widest text-right">النوع</Table.Th>
+                    <Table.Th className="text-[10px] font-black text-emerald-800/40 uppercase tracking-widest text-right">الإيجار المتوقع</Table.Th>
+                    <Table.Th className="text-[10px] font-black text-emerald-800/40 uppercase tracking-widest text-right">الإجراء</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
                   {previews.map((unit, idx) => (
-                    <tr key={idx} className="hover:bg-emerald-50/30 transition-colors">
-                      <td className="font-black text-emerald-950">{unit.unit_number}</td>
-                      <td className="font-bold text-emerald-700/60 text-sm">{unit.floor_number}</td>
-                      <td>
+                    <Table.Tr key={idx} className="hover:bg-emerald-50/30 transition-colors">
+                      <Table.Td className="font-black text-emerald-950">{unit.unit_number}</Table.Td>
+                      <Table.Td className="font-bold text-emerald-700/60 text-sm">{unit.floor_number}</Table.Td>
+                      <Table.Td>
                         <Badge variant="dot" color="emerald" radius="sm" size="sm" className="font-bold">
-                          {unit.unit_type === 'apartment' ? 'شقة' : unit.unit_type === 'shop' ? 'محل' : unit.unit_type}
+                          {EjarUnitTypes.find(t => t.value === unit.unit_type)?.label || unit.unit_type}
                         </Badge>
-                      </td>
-                      <td className="font-black text-emerald-900 text-sm">
-                        {unit.rent_expected.toLocaleString()} <span className="text-[10px] text-emerald-500">ريال</span>
-                      </td>
-                      <td>
+                      </Table.Td>
+                      <Table.Td className="font-black text-emerald-900 text-sm">
+                        {unit.rent_expected.toLocaleString('ar-SA')} <span className="text-[10px] text-emerald-500">ريال</span>
+                      </Table.Td>
+                      <Table.Td>
                         <ActionIcon 
                           color="rose" 
                           variant="light" 
@@ -286,10 +304,10 @@ export default function BulkUnitsPage() {
                         >
                           <Trash2 size={16} />
                         </ActionIcon>
-                      </td>
-                    </tr>
+                      </Table.Td>
+                    </Table.Tr>
                   ))}
-                </tbody>
+                </Table.Tbody>
               </Table>
             </div>
 

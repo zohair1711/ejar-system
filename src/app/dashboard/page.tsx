@@ -14,9 +14,16 @@ import {
   ChevronLeft
 } from "lucide-react";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 import { RingProgress, Text, Group, Stack, Progress, Badge } from "@mantine/core";
 
 export default function DashboardPage() {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["dashboard-overview"],
     queryFn: async () => {
@@ -515,5 +522,5 @@ function formatDate(d?: string | null) {
 
 function formatCurrency(n?: number | null) {
   const x = Number(n || 0);
-  return `${x.toLocaleString()} ر.س`;
+  return `${x.toLocaleString('ar-SA')} ر.س`;
 }

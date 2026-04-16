@@ -20,6 +20,7 @@ export default function RootLayout({
     <html
       lang="ar"
       dir="rtl"
+      suppressHydrationWarning
     >
       <head>
         <ColorSchemeScript defaultColorScheme="light" />
